@@ -1,5 +1,4 @@
-package main.java.eqaudio;
-
+package eqaudio;
 public class TestDecoderStandalone {
 
     // public static void main(String[] args) throws Exception {

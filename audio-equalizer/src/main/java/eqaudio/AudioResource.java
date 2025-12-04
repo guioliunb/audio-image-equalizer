@@ -1,49 +1,40 @@
 package eqaudio;
 
+import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Response;
 
 @Path("/audio")
 public class AudioResource {
 
-    private static Thread playThread;
+    @Inject
+    PlayerLauncher launcher;
 
     @GET
-    @Path("/test")
-    public String testDecoder() {
+    @Path("/play")
+    public Response play(@QueryParam("file") String file) {
+
+        if (file == null || file.isBlank()) {
+            return Response.status(400).entity("Parâmetro file= obrigatório").build();
+        }
+
         try {
-            // Evita iniciar 2 execuções ao mesmo tempo
-            if (playThread != null && playThread.isAlive()) {
-                return "Já está tocando. Aguarde terminar ou reinicie o servidor.";
-            }
-
-            playThread = new Thread(() -> {
-                try {
-                    // Caminho relativo à raiz do projeto (onde está o pom.xml)
-                    Mp3RealTimeDecoder decoder = new Mp3RealTimeDecoder("/home/guilherme/processamento-de-sinais/AmyWinehouse.mp3", 1024);
-                    decoder.enableAudioOutput(true); // toca o áudio
-
-                    System.out.println("Iniciando decodificação em tempo real...");
-
-                    decoder.start(block -> {
-                        // Aqui você vai plugar o DSP depois.
-                        // System.out.println("[Quarkus] bloco recebido: " + block.length + " samples");
-                    });
-
-                    System.out.println("Fim do MP3.");
-
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }, "Mp3PlayerThread");
-
-            playThread.start();
-
-            return "Decodificador iniciado. Verifique o console e o áudio.";
-
+            launcher.play(file);
+            return Response.ok("Reproduzindo (em processo externo): " + file).build();
         } catch (Exception e) {
             e.printStackTrace();
-            return "Erro ao iniciar decodificador: " + e.getMessage();
+            return Response.serverError()
+                    .entity("Erro ao lançar player: " + e.getMessage())
+                    .build();
         }
+    }
+
+    @GET
+    @Path("/stop")
+    public Response stop() {
+        launcher.stop();
+        return Response.ok("Stop enviado para o player externo.").build();
     }
 }

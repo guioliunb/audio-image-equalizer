@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Equalizador de Áudio - 5 Bandas</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #0f172a;
+            color: #e5e7eb;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 720px;
+            margin: 40px auto;
+            padding: 24px;
+            background: #020617;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            margin-bottom: 8px;
+        }
+
+        p {
+            margin-top: 0;
+            color: #9ca3af;
+            font-size: 0.95rem;
+        }
+
+        .band {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin: 18px 0;
+        }
+
+        .band-label {
+            width: 90px;
+            font-weight: 500;
+            color: #e5e7eb;
+        }
+
+        .band-slider {
+            flex: 1;
+        }
+
+        input[type="range"] {
+            width: 100%;
+        }
+
+        .gain-value {
+            width: 60px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .panel {
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid #1f2937;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.9rem;
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 9999px;
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .status {
+            color: #9ca3af;
+            font-family: monospace;
+            font-size: 0.8rem;
+            max-width: 380px;
+        }
+
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Equalizador de Áudio (Quarkus)</h1>
+    <p>
+        Controle das <strong>5 bandas</strong> em dB. Valores positivos realçam a banda, negativos atenuam.
+        Os ajustes são enviados para a API REST do Quarkus em tempo real.
+    </p>
+
+    <div id="bands"></div>
+
+    <div class="panel">
+        <div>
+            <button id="resetBtn">Resetar (0 dB)</button>
+        </div>
+        <div class="status" id="status">Status: carregando ganhos...</div>
+    </div>
+</div>
+
+<script>
+    // Definição das bandas (índice -> rótulo)
+    const BAND_DEFS = [
+        { id: 0, label: "100 Hz" },
+        { id: 1, label: "330 Hz" },
+        { id: 2, label: "1 kHz" },
+        { id: 3, label: "3.3 kHz" },
+        { id: 4, label: "10 kHz" }
+    ];
+
+    const bandsContainer = document.getElementById("bands");
+    const statusEl = document.getElementById("status");
+    const resetBtn = document.getElementById("resetBtn");
+
+    // Cria UI dos sliders
+    BAND_DEFS.forEach(band => {
+        const row = document.createElement("div");
+        row.className = "band";
+
+        const label = document.createElement("div");
+        label.className = "band-label";
+        label.textContent = band.label;
+
+        const sliderContainer = document.createElement("div");
+        sliderContainer.className = "band-slider";
+
+        const slider = document.createElement("input");
+        slider.type = "range";
+        slider.min = -12;
+        slider.max = 12;
+        // passo de 0.1 dB
+        slider.step = 0.1;
+        slider.value = 0;
+        slider.dataset.bandId = band.id;
+
+        const gainValue = document.createElement("div");
+        gainValue.className = "gain-value";
+        gainValue.textContent = "0.0 dB";
+
+        slider.addEventListener("input", () => {
+            const v = parseFloat(slider.value);
+            const shown = v.toFixed(1);
+            gainValue.textContent = shown + " dB";
+            sendBandGain(band.id, v);
+        });
+                                                                                                    
+
+        sliderContainer.appendChild(slider);
+        row.appendChild(label);
+        row.appendChild(sliderContainer);
+        row.appendChild(gainValue);
+
+        bandsContainer.appendChild(row);
+
+        band.sliderEl = slider;
+        band.valueEl = gainValue;
+    });
+
+    // Função para atualizar status
+    function setStatus(msg) {
+        const now = new Date();
+        const t = now.toLocaleTimeString();
+        statusEl.textContent = "Status [" + t + "]: " + msg;
+    }
+
+    // Carrega ganhos atuais via GET /eq/bands
+    async function loadCurrentGains() {
+        try {
+            const resp = await fetch("/eq/bands");
+            if (!resp.ok) throw new Error("HTTP " + resp.status);
+            const data = await resp.json(); // { "0": 0.0, "1": 0.0, ... }
+
+            BAND_DEFS.forEach(band => {
+                const db = data[band.id] ?? 0.0;
+                const rounded = Math.round(db);
+                band.sliderEl.value = rounded;
+                band.valueEl.textContent = rounded + " dB";
+            });
+
+            setStatus("Ganhos carregados com sucesso.");
+        } catch (err) {
+            console.error(err);
+            setStatus("Erro ao carregar ganhos: " + err.message);
+        }
+    }
+
+    // Envia ganho de UMA banda via PUT /eq/bands/{band}/gain
+    let pending = null;
+    function sendBandGain(bandId, gainDb) {
+        // Debounce leve: evita spammar o servidor em movimentos rápidos
+        if (pending) {
+            clearTimeout(pending);
+        }
+        pending = setTimeout(async () => {
+            try {
+                const resp = await fetch(`/eq/bands/${bandId}/gain`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ gainDb: gainDb })
+                });
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                setStatus(`Banda ${bandId} atualizada para ${gainDb} dB.`);
+            } catch (err) {
+                console.error(err);
+                setStatus("Erro ao enviar ganho: " + err.message);
+            }
+        }, 120);
+    }
+
+    // Botão "Resetar (0 dB)" -> coloca todas as bandas em 0 dB
+    resetBtn.addEventListener("click", async () => {
+        // Atualiza UI
+        BAND_DEFS.forEach(band => {
+            band.sliderEl.value = 0;
+            band.valueEl.textContent = "0 dB";
+        });
+
+        // Envia para API via PUT /eq/bands com JSON { "band0":0, ...}
+        const payload = {};
+        BAND_DEFS.forEach(band => {
+            payload["band" + band.id] = 0;
+        });
+
+        try {
+            const resp = await fetch("/eq/bands", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            if (!resp.ok) throw new Error("HTTP " + resp.status);
+            setStatus("Todas as bandas resetadas para 0 dB.");
+        } catch (err) {
+            console.error(err);
+            setStatus("Erro ao resetar bandas: " + err.message);
+        }
+    });
+
+    // Chamada inicial
+    loadCurrentGains();
+</script>
+</body>
+</html>
