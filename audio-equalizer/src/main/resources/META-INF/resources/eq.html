@@ -2,254 +2,575 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Equalizador de Áudio - 5 Bandas</title>
+    <title>Equalizador de Áudio – 5 Bandas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
     <style>
-        body {
+        :root {
+            --bg: #0b0d12;
+            --panel-bg: #141823;
+            --accent: #4fc3f7;
+            --accent-soft: #1e88e5;
+            --accent-danger: #ff5252;
+            --text: #f5f5f5;
+            --text-muted: #9ca3af;
+            --track: #252a3a;
+            --grid: #1e2230;
+        }
+
+        * {
+            box-sizing: border-box;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: #0f172a;
-            color: #e5e7eb;
+        }
+
+        body {
             margin: 0;
-            padding: 0;
+            min-height: 100vh;
+            background: radial-gradient(circle at 10% 20%, #1f2933 0, #020617 50%, #020617 100%);
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .container {
-            max-width: 720px;
-            margin: 40px auto;
-            padding: 24px;
-            background: #020617;
-            border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        .shell {
+            width: min(960px, 100vw - 32px);
+            padding: 20px;
+            background: linear-gradient(135deg, #020617, #020617 40%, #020b1f);
+            border-radius: 18px;
+            box-shadow:
+                0 0 0 1px rgba(148, 163, 184, 0.08),
+                0 18px 45px rgba(15, 23, 42, 0.9);
         }
 
-        h1 {
-            font-size: 1.6rem;
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 16px;
+        }
+
+        .title {
+            font-size: 1.1rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .status-pill {
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(15, 118, 110, 0.18);
+            color: #a5f3fc;
+            font-size: 0.75rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #22c55e;
+            box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.25);
+        }
+
+        .main-panel {
+            margin-top: 8px;
+            padding: 16px 18px 14px 18px;
+            background: radial-gradient(circle at top, rgba(15, 23, 42, 0.35) 0, #020617 55%);
+            border-radius: 14px;
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .grid-overlay {
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(to right, rgba(30, 64, 175, 0.12) 1px, transparent 1px),
+                linear-gradient(to top, rgba(30, 64, 175, 0.10) 1px, transparent 1px);
+            background-size: 72px 72px;
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        .eq-content {
+            position: relative;
+            display: grid;
+            grid-template-columns: 1.5fr 2fr;
+            gap: 18px;
+            z-index: 1;
+        }
+
+        @media (max-width: 780px) {
+            .eq-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Lado esquerdo: sliders */
+        .sliders-panel {
+            padding: 10px 12px 4px 12px;
+            background: linear-gradient(180deg, rgba(15,23,42,0.8), #020617 65%);
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .sliders-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
             margin-bottom: 8px;
         }
 
-        p {
-            margin-top: 0;
-            color: #9ca3af;
-            font-size: 0.95rem;
+        .sliders-header span {
+            font-size: 0.85rem;
+            color: var(--text-muted);
         }
 
-        .band {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            margin: 18px 0;
-        }
-
-        .band-label {
-            width: 90px;
-            font-weight: 500;
-            color: #e5e7eb;
-        }
-
-        .band-slider {
-            flex: 1;
-        }
-
-        input[type="range"] {
-            width: 100%;
-        }
-
-        .gain-value {
-            width: 60px;
-            text-align: right;
-            font-variant-numeric: tabular-nums;
-        }
-
-        .panel {
-            margin-top: 24px;
-            padding-top: 16px;
-            border-top: 1px solid #1f2937;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            font-size: 0.9rem;
-        }
-
-        button {
-            background: #2563eb;
-            color: white;
-            border: none;
-            border-radius: 9999px;
-            padding: 8px 16px;
-            font-size: 0.9rem;
+        .reset-button {
+            padding: 4px 9px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            background: transparent;
+            color: var(--text-muted);
             cursor: pointer;
         }
 
-        button:hover {
-            background: #1d4ed8;
+        .reset-button:hover {
+            border-color: var(--accent);
+            color: var(--accent);
         }
 
-        .status {
-            color: #9ca3af;
-            font-family: monospace;
+        .sliders-row {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-end;
+            padding: 12px 4px 4px 0;
+        }
+
+        .slider-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .slider-label {
             font-size: 0.8rem;
-            max-width: 380px;
+            color: var(--text-muted);
         }
 
+        .slider-value {
+            font-size: 0.78rem;
+            min-width: 56px;
+            text-align: center;
+            color: var(--accent);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .slider-db-scale {
+            height: 140px;
+            width: 6px;
+            border-radius: 999px;
+            background: linear-gradient(to top, #1e293b, #020617);
+            position: relative;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slider-db-scale::before {
+            content: '';
+            position: absolute;
+            inset: 10px 1px;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+        }
+
+        .slider-db-labels {
+            position: absolute;
+            left: -24px;
+            top: 6px;
+            bottom: 6px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            font-size: 0.62rem;
+            color: var(--text-muted);
+            text-align: right;
+        }
+
+        .slider-wrapper {
+            position: relative;
+            height: 140px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slider-wrapper input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 140px;
+            height: 16px;
+            background: transparent;
+            transform: rotate(-90deg);
+            cursor: pointer;
+        }
+
+        .slider-wrapper input[type="range"]::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #1f2937, #374151);
+        }
+
+        .slider-wrapper input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent);
+            border: 2px solid #0b1120;
+            box-shadow:
+                0 0 0 4px rgba(79, 195, 247, 0.25),
+                0 3px 6px rgba(0, 0, 0, 0.6);
+            margin-top: -5px;
+        }
+
+        .slider-wrapper input[type="range"]::-moz-range-track {
+            height: 6px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #1f2937, #374151);
+        }
+
+        .slider-wrapper input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent);
+            border: 2px solid #0b1120;
+            box-shadow:
+                0 0 0 4px rgba(79, 195, 247, 0.25),
+                0 3px 6px rgba(0, 0, 0, 0.6);
+        }
+
+        .slider-wrapper input[type="range"]:focus {
+            outline: none;
+        }
+
+        /* Lado direito: info / status */
+        .info-panel {
+            padding: 10px 14px 8px 14px;
+            background: linear-gradient(180deg, rgba(15,23,42,0.9), #020617 75%);
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .info-panel h2 {
+            margin: 0;
+            font-size: 0.88rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: #e5e7eb;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .tag {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: rgba(99, 102, 241, 0.15);
+            color: #a5b4fc;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        .hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .gain-badge {
+            font-variant-numeric: tabular-nums;
+            font-size: 0.8rem;
+            color: var(--accent);
+        }
+
+        .footer {
+            margin-top: 10px;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            opacity: 0.9;
+        }
+
+        .footer span {
+            opacity: 0.8;
+        }
     </style>
 </head>
 <body>
-<div class="container">
-    <h1>Equalizador de Áudio (Quarkus)</h1>
-    <p>
-        Controle das <strong>5 bandas</strong> em dB. Valores positivos realçam a banda, negativos atenuam.
-        Os ajustes são enviados para a API REST do Quarkus em tempo real.
-    </p>
-
-    <div id="bands"></div>
-
-    <div class="panel">
+<div class="shell">
+    <div class="header">
         <div>
-            <button id="resetBtn">Resetar (0 dB)</button>
+            <div class="title">Equalizador gráfico · 5 Bandas</div>
+            <div class="subtitle">44100 Hz · Banco de filtros FIR em paralelo</div>
         </div>
-        <div class="status" id="status">Status: carregando ganhos...</div>
+        <div class="status-pill">
+            <div class="status-dot"></div>
+            <span>Conectado ao engine</span>
+        </div>
+    </div>
+
+    <div class="main-panel">
+        <div class="grid-overlay"></div>
+
+        <div class="eq-content">
+
+            <!-- Lado esquerdo: Sliders -->
+            <div class="sliders-panel">
+                <div class="sliders-header">
+                    <span>Ganhos por banda</span>
+                    <button class="reset-button" id="btn-reset">Resetar 0 dB</button>
+                </div>
+
+                <div class="sliders-row">
+
+                    <!-- Cada coluna é uma banda -->
+                    <div class="slider-column" data-band="0">
+                        <div class="slider-label">100 Hz</div>
+                        <div class="slider-value" id="val-0">0.0 dB</div>
+
+                        <div class="slider-wrapper">
+                            <div class="slider-db-scale">
+                                <div class="slider-db-labels">
+                                    <span>+12</span>
+                                    <span>0</span>
+                                    <span>-12</span>
+                                </div>
+                            </div>
+                            <input type="range"
+                                   min="-12" max="12" step="0.1" value="0"
+                                   class="slider" id="band-0">
+                        </div>
+                    </div>
+
+                    <div class="slider-column" data-band="1">
+                        <div class="slider-label">330 Hz</div>
+                        <div class="slider-value" id="val-1">0.0 dB</div>
+
+                        <div class="slider-wrapper">
+                            <div class="slider-db-scale">
+                                <div class="slider-db-labels">
+                                    <span>+12</span>
+                                    <span>0</span>
+                                    <span>-12</span>
+                                </div>
+                            </div>
+                            <input type="range"
+                                   min="-12" max="12" step="0.1" value="0"
+                                   class="slider" id="band-1">
+                        </div>
+                    </div>
+
+                    <div class="slider-column" data-band="2">
+                        <div class="slider-label">1 kHz</div>
+                        <div class="slider-value" id="val-2">0.0 dB</div>
+
+                        <div class="slider-wrapper">
+                            <div class="slider-db-scale">
+                                <div class="slider-db-labels">
+                                    <span>+12</span>
+                                    <span>0</span>
+                                    <span>-12</span>
+                                </div>
+                            </div>
+                            <input type="range"
+                                   min="-12" max="12" step="0.1" value="0"
+                                   class="slider" id="band-2">
+                        </div>
+                    </div>
+
+                    <div class="slider-column" data-band="3">
+                        <div class="slider-label">3.3 kHz</div>
+                        <div class="slider-value" id="val-3">0.0 dB</div>
+
+                        <div class="slider-wrapper">
+                            <div class="slider-db-scale">
+                                <div class="slider-db-labels">
+                                    <span>+12</span>
+                                    <span>0</span>
+                                    <span>-12</span>
+                                </div>
+                            </div>
+                            <input type="range"
+                                   min="-12" max="12" step="0.1" value="0"
+                                   class="slider" id="band-3">
+                        </div>
+                    </div>
+
+                    <div class="slider-column" data-band="4">
+                        <div class="slider-label">10 kHz</div>
+                        <div class="slider-value" id="val-4">0.0 dB</div>
+
+                        <div class="slider-wrapper">
+                            <div class="slider-db-scale">
+                                <div class="slider-db-labels">
+                                    <span>+12</span>
+                                    <span>0</span>
+                                    <span>-12</span>
+                                </div>
+                            </div>
+                            <input type="range"
+                                   min="-12" max="12" step="0.1" value="0"
+                                   class="slider" id="band-4">
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Lado direito: info / status -->
+            <div class="info-panel">
+
+                <div class="info-row">
+                    <span>Ganhos atuais (dB)</span>
+                    <span class="gain-badge" id="gain-summary">[0, 0, 0, 0, 0]</span>
+                </div>
+                
+            </div>
+        </div>
+
+        <div class="footer">
+            <span>Quarkus · REST API /eq/bands</span>
+            <span>Fs = 44.1 kHz · estéreo · tempo real</span>
+        </div>
     </div>
 </div>
 
 <script>
-    // Definição das bandas (índice -> rótulo)
-    const BAND_DEFS = [
-        { id: 0, label: "100 Hz" },
-        { id: 1, label: "330 Hz" },
-        { id: 2, label: "1 kHz" },
-        { id: 3, label: "3.3 kHz" },
-        { id: 4, label: "10 kHz" }
-    ];
+    const sliders = [];
+    const values  = [];
+    const gains   = [0, 0, 0, 0, 0];
 
-    const bandsContainer = document.getElementById("bands");
-    const statusEl = document.getElementById("status");
-    const resetBtn = document.getElementById("resetBtn");
-
-    // Cria UI dos sliders
-    BAND_DEFS.forEach(band => {
-        const row = document.createElement("div");
-        row.className = "band";
-
-        const label = document.createElement("div");
-        label.className = "band-label";
-        label.textContent = band.label;
-
-        const sliderContainer = document.createElement("div");
-        sliderContainer.className = "band-slider";
-
-        const slider = document.createElement("input");
-        slider.type = "range";
-        slider.min = -12;
-        slider.max = 12;
-        // passo de 0.1 dB
-        slider.step = 0.1;
-        slider.value = 0;
-        slider.dataset.bandId = band.id;
-
-        const gainValue = document.createElement("div");
-        gainValue.className = "gain-value";
-        gainValue.textContent = "0.0 dB";
-
-        slider.addEventListener("input", () => {
-            const v = parseFloat(slider.value);
-            const shown = v.toFixed(1);
-            gainValue.textContent = shown + " dB";
-            sendBandGain(band.id, v);
-        });
-                                                                                                    
-
-        sliderContainer.appendChild(slider);
-        row.appendChild(label);
-        row.appendChild(sliderContainer);
-        row.appendChild(gainValue);
-
-        bandsContainer.appendChild(row);
-
-        band.sliderEl = slider;
-        band.valueEl = gainValue;
-    });
-
-    // Função para atualizar status
-    function setStatus(msg) {
-        const now = new Date();
-        const t = now.toLocaleTimeString();
-        statusEl.textContent = "Status [" + t + "]: " + msg;
+    function formatDb(v) {
+        const sign = (v > 0) ? "+" : "";
+        return sign + v.toFixed(1) + " dB";
     }
 
-    // Carrega ganhos atuais via GET /eq/bands
-    async function loadCurrentGains() {
-        try {
-            const resp = await fetch("/eq/bands");
-            if (!resp.ok) throw new Error("HTTP " + resp.status);
-            const data = await resp.json(); // { "0": 0.0, "1": 0.0, ... }
+    function refreshSummary() {
+        const el = document.getElementById("gain-summary");
+        el.textContent = "[" + gains.map(v => v.toFixed(1)).join(", ") + "]";
+    }
 
-            BAND_DEFS.forEach(band => {
-                const db = data[band.id] ?? 0.0;
-                const rounded = Math.round(db);
-                band.sliderEl.value = rounded;
-                band.valueEl.textContent = rounded + " dB";
+    // Envia TODAS as bandas de uma vez para o backend
+    let sendTimer = null;
+    function sendAllGainsDebounced() {
+        if (sendTimer) clearTimeout(sendTimer);
+        sendTimer = setTimeout(sendAllGains, 80);
+    }
+
+    function sendAllGains() {
+        const body = {
+            band0: gains[0],
+            band1: gains[1],
+            band2: gains[2],
+            band3: gains[3],
+            band4: gains[4]
+        };
+
+        fetch("/eq/bands", {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(body)
+        }).catch(err => {
+            console.error("Falha ao enviar ganhos:", err);
+        });
+    }
+
+    function setSlider(i, valueDb) {
+        gains[i] = valueDb;
+        sliders[i].value = valueDb;
+        values[i].textContent = formatDb(valueDb);
+    }
+
+    // Resetar tudo para 0 dB
+    function resetAll() {
+        for (let i = 0; i < 5; i++) {
+            setSlider(i, 0.0);
+        }
+        refreshSummary();
+        sendAllGains();
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        // pega referências
+        for (let i = 0; i < 5; i++) {
+            sliders[i] = document.getElementById("band-" + i);
+            values[i]  = document.getElementById("val-" + i);
+
+            sliders[i].addEventListener("input", e => {
+                const v = parseFloat(e.target.value);
+                gains[i] = v;
+                values[i].textContent = formatDb(v);
+                refreshSummary();
+                sendAllGainsDebounced();
             });
-
-            setStatus("Ganhos carregados com sucesso.");
-        } catch (err) {
-            console.error(err);
-            setStatus("Erro ao carregar ganhos: " + err.message);
         }
-    }
 
-    // Envia ganho de UMA banda via PUT /eq/bands/{band}/gain
-    let pending = null;
-    function sendBandGain(bandId, gainDb) {
-        // Debounce leve: evita spammar o servidor em movimentos rápidos
-        if (pending) {
-            clearTimeout(pending);
-        }
-        pending = setTimeout(async () => {
-            try {
-                const resp = await fetch(`/eq/bands/${bandId}/gain`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ gainDb: gainDb })
-                });
-                if (!resp.ok) throw new Error("HTTP " + resp.status);
-                setStatus(`Banda ${bandId} atualizada para ${gainDb} dB.`);
-            } catch (err) {
-                console.error(err);
-                setStatus("Erro ao enviar ganho: " + err.message);
-            }
-        }, 120);
-    }
-
-    // Botão "Resetar (0 dB)" -> coloca todas as bandas em 0 dB
-    resetBtn.addEventListener("click", async () => {
-        // Atualiza UI
-        BAND_DEFS.forEach(band => {
-            band.sliderEl.value = 0;
-            band.valueEl.textContent = "0 dB";
+        document.getElementById("btn-reset").addEventListener("click", () => {
+            resetAll();
         });
 
-        // Envia para API via PUT /eq/bands com JSON { "band0":0, ...}
-        const payload = {};
-        BAND_DEFS.forEach(band => {
-            payload["band" + band.id] = 0;
-        });
-
-        try {
-            const resp = await fetch("/eq/bands", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
+        // Busca ganhos atuais do backend
+        fetch("/eq/bands")
+            .then(r => r.json())
+            .then(data => {
+                // data deve ser algo como {"0": 0.0, "1": 1.5, ...} ou similar
+                for (let i = 0; i < 5; i++) {
+                    let v = 0.0;
+                    if (data.hasOwnProperty(i)) {
+                        v = data[i];
+                    } else if (data.hasOwnProperty("band" + i)) {
+                        v = data["band" + i];
+                    }
+                    setSlider(i, parseFloat(v) || 0.0);
+                }
+                refreshSummary();
+            })
+            .catch(err => {
+                console.warn("Não foi possível obter ganhos iniciais:", err);
+                refreshSummary();
             });
-            if (!resp.ok) throw new Error("HTTP " + resp.status);
-            setStatus("Todas as bandas resetadas para 0 dB.");
-        } catch (err) {
-            console.error(err);
-            setStatus("Erro ao resetar bandas: " + err.message);
-        }
     });
-
-    // Chamada inicial
-    loadCurrentGains();
 </script>
 </body>
 </html>

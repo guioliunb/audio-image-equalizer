@@ -1,108 +1,128 @@
 public class EqualizerEngine {
 
     private static final float FS = 44100f;
-    private static final int NUM_BANDS = 5;
 
-    // 5 filtros FIR, um por banda
-    private final FirBandPass[] bands = new FirBandPass[NUM_BANDS];
+    // 5 bandas:
+    // 1: 100 – 215 Hz
+    // 2: 215 – 665 Hz
+    // 3: 665 – 2150 Hz
+    // 4: 2150 – 6650 Hz
+    // 5: 6650 – 10000 Hz
+    private final FirBandPass[] bands = new FirBandPass[5];
 
-    // ganhos por banda (dB e linear)
-    private final double[] gainDb = new double[NUM_BANDS];
-    private final double[] gainLinear = new double[NUM_BANDS];
+    // ganhos em dB e linear para cada banda
+    private final double[] gainDb  = new double[5];
+    private final double[] gainLin = new double[5];
 
     public EqualizerEngine() {
-        int K = 64; // N = 2K+1 = 129 taps
+        int K = 64; // N = 2K+1 taps
 
-        // Frequências centrais (Hz)
-        double[] fc = { 100.0, 330.0, 1000.0, 3300.0, 10000.0 };
+        bands[0] = new FirBandPass(FS,  100.0,   215.0,  K);
+        bands[1] = new FirBandPass(FS,  215.0,   665.0,  K);
+        bands[2] = new FirBandPass(FS,  665.0,  2150.0,  K);
+        bands[3] = new FirBandPass(FS, 2150.0,  6650.0,  K);
+        bands[4] = new FirBandPass(FS, 6650.0, 10000.0,  K);
 
-        // Cortes entre bandas (meio entre centrais)
-        double[] cut = new double[NUM_BANDS + 1];
-        cut[0] = 0.0;                     // início (DC)
-        cut[1] = (fc[0] + fc[1]) / 2.0;   // 215 Hz
-        cut[2] = (fc[1] + fc[2]) / 2.0;   // 665 Hz
-        cut[3] = (fc[2] + fc[3]) / 2.0;   // 2150 Hz
-        cut[4] = (fc[3] + fc[4]) / 2.0;   // 6650 Hz
-        cut[5] = FS / 2.0;                // Nyquist ~ 22050 Hz
-
-        // Cria as 5 bandas
-        for (int i = 0; i < NUM_BANDS; i++) {
-            double fLow  = cut[i];
-            double fHigh = cut[i + 1];
-            bands[i] = new FirBandPass(FS, fLow, fHigh, K);
-
-            gainDb[i] = 0.0;
-            gainLinear[i] = 1.0; // 0 dB
+        // todos começam em 0 dB (ganho 1.0)
+        for (int i = 0; i < 5; i++) {
+            gainDb[i]  = 0.0;
+            gainLin[i] = 1.0;
         }
     }
 
-    /**
-     * Define o ganho de UMA banda em dB.
-     */
-    public void setBandGainDb(int bandIndex, double db) {
-        if (bandIndex < 0 || bandIndex >= NUM_BANDS) return;
-        gainDb[bandIndex] = db;
-        gainLinear[bandIndex] = Math.pow(10.0, db / 20.0);
+    public int getNumBands() {
+        return 5;
+    }
+
+    public void setBandGainDb(int band, double db) {
+        if (band < 0 || band >= 5) return;
+
+        // limitar range de ganho, ex.: [-12, +12] dB
+        if (db > 12.0) db = 12.0;
+        if (db < -12.0) db = -12.0;
+
+        gainDb[band]  = db;
+        gainLin[band] = Math.pow(10.0, db / 20.0);
+    }
+
+    public double getBandGainDb(int band) {
+        if (band < 0 || band >= 5) return 0.0;
+        return gainDb[band];
     }
 
     /**
-     * Compatibilidade antiga: considera band 2 como banda de médios.
-     */
-    public void setGainDb(double db) {
-        setBandGainDb(2, db);
-    }
-
-    /**
-     * Novo modelo:
+     * Processa IN-PLACE o bloco de samples intercalados (L,R,L,R,...).
      *
-     *   y[n] = x[n] + Σ (A_i - 1) * banda_i[n]
+     * Modelo:
+     *   y[n] = x[n] + Σ (G_i - 1) * b_i[n]
      *
-     * - x[n]         = samples original
-     * - banda_i[n]   = x[n] filtrado pela banda i
-     * - A_i          = ganho linear da banda i
+     * onde:
+     *   x[n]   = sinal original (dry)
+     *   b_i[n] = x[n] filtrado na banda i (passa-faixa FIR)
+     *   G_i    = ganho linear da banda i
+     *
+     * Se todos G_i = 1 (0 dB), então:
+     *   y[n] = x[n]
      */
     public void processInPlace(float[] samples, int length) {
         if (length <= 0) return;
 
-        // 1) Guarda o sinal original x[n]
-        float[] original = new float[length];
-        System.arraycopy(samples, 0, original, 0, length);
+        // 1) dry = cópia do sinal original
+        float[] dry = new float[length];
+        System.arraycopy(samples, 0, dry, 0, length);
 
-        // 2) Começa a saída com o próprio sinal original (dry)
-        System.arraycopy(original, 0, samples, 0, length);
+        // 2) acc = começa como o sinal original
+        float[] acc = new float[length];
+        System.arraycopy(dry, 0, acc, 0, length);
 
-        // Buffer de trabalho para cada banda
-        float[] work = new float[length];
+        // 3) buffer temporário: saída da banda b
+        float[] tmp = new float[length];
 
-        // 3) Para cada banda, calcula correção relativa (A_i - 1)
-        for (int b = 0; b < NUM_BANDS; b++) {
+        // 4) para cada banda
+        for (int b = 0; b < 5; b++) {
+            double G = gainLin[b];
 
-            double gLin = gainLinear[b];
-            double delta = gLin - 1.0;
-
-            // Se ganho é ~0 dB (A≈1), não precisa fazer nada para essa banda
-            if (Math.abs(delta) < 1e-6) {
+            // Se G == 1.0 (0 dB), essa banda não muda nada → pode pular
+            if (Math.abs(G - 1.0) < 1e-6) {
                 continue;
             }
 
-            // Copia x[n] para o buffer de trabalho
-            System.arraycopy(original, 0, work, 0, length);
+            // tmp = cópia do sinal original
+            System.arraycopy(dry, 0, tmp, 0, length);
 
-            // Filtra -> work[] = banda_b[n]
-            bands[b].processBlock(work, length);
+            // aplica o FIR passa-faixa dessa banda
+            bands[b].processBlock(tmp, length);
 
-            float g = (float) delta;
+            // fator de correção = (G - 1)
+            float gCorr = (float) (G - 1.0);
 
-            // y += (A_i - 1) * banda_i[n]
-            for (int i = 0; i < length; i++) {
-                samples[i] += g * work[i];
+            // acumula: acc[n] += (G - 1) * tmp[n]
+            for (int n = 0; n < length; n++) {
+                acc[n] += gCorr * tmp[n];
             }
         }
 
-        // 4) Clamping leve para evitar estouro além de [-1,1]
-        for (int i = 0; i < length; i++) {
-            if (samples[i] > 1.0f) samples[i] = 1.0f;
-            else if (samples[i] < -1.0f) samples[i] = -1.0f;
+        // 5) LIMITER SUAVE DE PICO (normalização de bloco)
+        float threshold = 0.95f;  // teto de segurança (< 1.0)
+        float maxAbs = 0.0f;
+
+        // encontra o pico absoluto no bloco
+        for (int n = 0; n < length; n++) {
+            float v = Math.abs(acc[n]);
+            if (v > maxAbs) {
+                maxAbs = v;
+            }
         }
+
+        // se ultrapassou o teto, normaliza todo o bloco
+        if (maxAbs > threshold) {
+            float scale = threshold / maxAbs;
+            for (int n = 0; n < length; n++) {
+                acc[n] *= scale;
+            }
+        }
+
+        // 6) escreve saída final de volta em samples
+        System.arraycopy(acc, 0, samples, 0, length);
     }
 }
